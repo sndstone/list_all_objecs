@@ -53,27 +53,52 @@ s3 = boto3.client("s3",
 
 logging.info('S3 client created.')
 
-logging.info('Listing object versions in bucket...')
+logging.info('Listing objects in bucket...')
 
-# Use the list_object_versions method to get a list of all object versions in the bucket
-response = s3.list_object_versions(Bucket=BUCKET_NAME)
+# Use the list_objects_v2 method to get a list of all objects in the bucket
+response = s3.list_objects_v2(Bucket=BUCKET_NAME)
 
-logging.info('Object versions listed.')
+logging.info('Objects listed.')
 
-logging.info('Writing object version listing to CSV file...')
+logging.info('Writing object listing to CSV file...')
 
-# Create and open the CSV file for object version listing
-with open(os.path.join(script_dir, 'object_version_listing.csv'), 'w', newline='') as file:
+# Create and open the CSV file for object listing
+with open(os.path.join(script_dir, 'object_listing.csv'), 'w', newline='') as file:
     writer = csv.writer(file)
-    writer.writerow(["Key", "VersionId", "Size", "Last Modified", "Is Latest"])
+    writer.writerow(["Key", "Size", "Last Modified"])
 
     # Check if the bucket contains any objects
-    if 'Versions' in response:
-        # Loop through each object version in the bucket
-        for version in response['Versions']:
-            # Add the object's key (name), version ID, size, last modified date, and whether it is the latest version to the CSV file
-            writer.writerow([version['Key'], version['VersionId'], version['Size'], version['LastModified'], version['IsLatest']])
+    if 'Contents' in response:
+        # Loop through each object in the bucket
+        for obj in response['Contents']:
+            # Add the object's key (name), size, and last modified date to the CSV file
+            writer.writerow([obj['Key'], obj['Size'], obj['LastModified']])
 
-logging.info('Object version listing written to CSV file.')
+logging.info('Object listing written to CSV file.')
 
-print("Object version listing has been exported to " + os.path.join(script_dir, 'object_version_listing.csv'))
+print("Object listing has been exported to " + os.path.join(script_dir, 'object_listing.csv'))
+
+HEAD_OBJECTS = ask_yes_no("Do you want to run head on all objects? (yes/no): ")
+
+if HEAD_OBJECTS:
+    logging.info('Running head operation on all objects...')
+    
+    # Create and open the CSV file for object heads
+    with open(os.path.join(script_dir, 'object_heads.csv'), 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Key", "Exists", "Response Code"])
+
+        # Loop through each object in the bucket
+        for obj in response['Contents']:
+            try:
+                # Run a head operation on the object
+                s3.head_object(Bucket=BUCKET_NAME, Key=obj['Key'])
+                # If the head operation is successful, write "True" to the CSV file
+                writer.writerow([obj['Key'], True, None])
+            except Exception as e:
+                # If the head operation fails, write the response code to the CSV file
+                writer.writerow([obj['Key'], False, e.response['Error']['Code']])
+
+    logging.info('Head operation completed. Results written to CSV file.')
+
+    print("Object heads have been exported to " + os.path.join(script_dir, 'object_heads.csv'))
